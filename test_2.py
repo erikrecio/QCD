@@ -6,10 +6,11 @@ from pennylane import numpy as np
 from pennylane.optimize import NesterovMomentumOptimizer
 
 num_qubits = 2
-num_layers_encoding = 1
+num_layers_encoding = 3
 num_layers_unitaries = 6
-num_iters = 60
-one_shot = True
+num_iters = 100
+one_shot = 2 # 0 - nothing, 1 - probabilities squared, 2 - variance
+strength = 1/2 # lambda of the regularisation
 
 
 dev = qml.device("default.qubit", wires=num_qubits)
@@ -28,55 +29,63 @@ def get_angles(x):
 
 def statepreparation(a):
     
-    # for i in range(num_qubits):
-    #     qml.RY(a[0], wires=i)
-    #     if i != num_qubits-1:
-    #         qml.CNOT(wires=[i, i+1])
-    #     qml.RY(a[1], wires=i)
-    #     if i != num_qubits-1:
-    #         qml.CNOT(wires=[i, i+1])
-    #     qml.RY(a[2], wires=i)
-    #     if i != num_qubits-1:
-    #         qml.CNOT(wires=[i, i+1])
-    #     qml.RY(a[3], wires=i)
-    #     if i != num_qubits-1:
-    #         qml.CNOT(wires=[i, i+1])
-    #     qml.RY(a[4], wires=i)
-    #     if i != num_qubits-1:
-    #         qml.CNOT(wires=[i, i+1])
-    
-    qml.RY(a[0], wires=0)
+    for i in range(num_qubits):
+        qml.RY(a[0], wires=i)
+        if i != num_qubits-1:
+            qml.CNOT(wires=[i, i+1])
+        qml.RY(a[1], wires=i)
+        if i != num_qubits-1:
+            qml.CNOT(wires=[i, i+1])
+        qml.RY(a[2], wires=i)
+        if i != num_qubits-1:
+            qml.CNOT(wires=[i, i+1])
+        
+        qml.PauliX(wires=i)
+        
+        qml.RY(a[3], wires=i)
+        if i != num_qubits-1:
+            qml.CNOT(wires=[i, i+1])
+        qml.RY(a[4], wires=i)
+        if i != num_qubits-1:
+            qml.CNOT(wires=[i, i+1])
 
-    qml.CNOT(wires=[0, 1])
-    qml.RY(a[1], wires=1)
-    qml.CNOT(wires=[0, 1])
-    qml.RY(a[2], wires=1)
+        qml.PauliX(wires=i)
+        
+    # qml.RY(a[0], wires=0)
 
-    qml.PauliX(wires=0)
-    qml.CNOT(wires=[0, 1])
-    qml.RY(a[3], wires=1)
-    qml.CNOT(wires=[0, 1])
-    qml.RY(a[4], wires=1)
-    qml.PauliX(wires=0)
+    # qml.CNOT(wires=[0, 1])
+    # qml.RY(a[1], wires=1)
+    # qml.CNOT(wires=[0, 1])
+    # qml.RY(a[2], wires=1)
+
+    # qml.PauliX(wires=0)
+    # qml.CNOT(wires=[0, 1])
+    # qml.RY(a[3], wires=1)
+    # qml.CNOT(wires=[0, 1])
+    # qml.RY(a[4], wires=1)
+    # qml.PauliX(wires=0)
 
 
 def layer(W):
     
-    # for i in range(num_qubits):
-    #     qml.Rot(W[i, 0], W[i, 1], W[i, 2], wires=i)
-    #     if i != num_qubits-1:
-    #         qml.CNOT([i,i+1])
+    for i in range(num_qubits):
+        qml.Rot(W[i, 0], W[i, 1], W[i, 2], wires=i)
+        # if i != num_qubits-1:
+        #     qml.CNOT([i,i+1])
+            
+    for i in range(num_qubits-1):
+        qml.CNOT([i,i+1])
     
-    qml.Rot(W[0, 0], W[0, 1], W[0, 2], wires=0)
-    qml.Rot(W[1, 0], W[1, 1], W[1, 2], wires=1)
-    qml.CNOT(wires=[0, 1])
+    # qml.Rot(W[0, 0], W[0, 1], W[0, 2], wires=0)
+    # qml.Rot(W[1, 0], W[1, 1], W[1, 2], wires=1)
+    # qml.CNOT(wires=[0, 1])
     
     
 @qml.qnode(dev, interface="autograd")
 def circuit(weights, angles):
     
-    # for j in range(num_layers_unitaries):
-    #     layer(weights[j])
+    for j in range(num_layers_unitaries):
+        layer(weights[j])
     
     for i in range(num_layers_encoding):
         
@@ -98,13 +107,15 @@ def square_loss(labels, predictions):
         loss = loss + (l - p) ** 2
 
     
-    if one_shot:
-        regularisation = sum([((p+1)/2)**2 + (1-(p+1)/2)**2 for p in predictions])
+    if one_shot == 1:
+        regularisation = -sum([((p+1)/2)**2 + (1-(p+1)/2)**2 for p in predictions])
+    elif one_shot == 2:
+        regularisation = sum([1 - p**2 for p in predictions])
     else:
         regularisation = 0
     
     
-    loss = (loss - regularisation)/ len(labels)
+    loss = (loss + strength*regularisation)/ len(labels)
 
     return loss
 
@@ -291,14 +302,15 @@ plt.legend()
 plt.show()
 
 
-predictions_train = [variational_classifier(weights[plot_iter-1], bias, f) for f in feats_train]
-# predictions_val = [variational_classifier(w, bias, f) for f in feats_val]
+#%%
 
 import pandas as pd
 from datetime import datetime
 from datetime import datetime
 import pytz
 
+predictions_train = [variational_classifier(weights[plot_iter-1], bias, f) for f in feats_train]
+# predictions_val = [variational_classifier(w, bias, f) for f in feats_val]
 z = list(zip(X_train, predictions_train, Y_train))
 
 
