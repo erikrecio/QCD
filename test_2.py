@@ -5,11 +5,12 @@ import pennylane as qml
 from pennylane import numpy as np
 from pennylane.optimize import NesterovMomentumOptimizer
 
-num_qubits = 2
-num_layers_encoding = 3
+num_qubits = 6 #2
+num_layers_encoding = 3 #3
 num_layers_unitaries = 6
-num_iters = 100
-one_shot = 2 # 0 - nothing, 1 - probabilities squared, 2 - variance
+num_iters = 60
+
+one_shot = 0 # 0 - nothing, 1 - probabilities squared, 2 - variance
 strength = 1/2 # lambda of the regularisation
 
 
@@ -209,33 +210,38 @@ batch_size = 5
 
 # train the variational classifier
 weights = []
+bias = []
 w = weights_init
-bias = bias_init
+b = bias_init
 for it in range(num_iters): #60
 
     # Update the weights by one optimizer step
     batch_index = np.random.randint(0, num_train, (batch_size,))
     feats_train_batch = feats_train[batch_index]
     Y_train_batch = Y_train[batch_index]
-    w, bias, _, _ = opt.step(cost, w, bias, feats_train_batch, Y_train_batch)
+    w, b, _, _ = opt.step(cost, w, b, feats_train_batch, Y_train_batch)
     weights.append(w)
+    bias.append(b)
     
     # Compute predictions on train and validation set
-    predictions_train = [np.sign(variational_classifier(w, bias, f)) for f in feats_train]
-    predictions_val = [np.sign(variational_classifier(w, bias, f)) for f in feats_val]
+    predictions_train = [np.sign(variational_classifier(w, b, f)) for f in feats_train]
+    predictions_val = [np.sign(variational_classifier(w, b, f)) for f in feats_val]
 
     # Compute accuracy on train and validation set
     acc_train = accuracy(Y_train, predictions_train)
     acc_val = accuracy(Y_val, predictions_val)
 
     print(
-        "Iter: {:5d} | Cost: {:0.7f} | Acc train: {:0.7f} | Acc validation: {:0.7f} "
-        "".format(it + 1, cost(w, bias, features, Y), acc_train, acc_val)
+        "Iter: {:5d} | Cost: {:0.7f} | Acc train: {:0.7f} | Acc validation: {:0.7f}"
+        "".format(it + 1, cost(w, b, features, Y), acc_train, acc_val)
     )
     
+    # if acc_train == 1:
+    #     break
+
 #%%
 
-plot_iter = 60
+plot_iter = 91 #it+1 #80
 
 plt.figure()
 cm = plt.cm.RdBu
@@ -252,7 +258,7 @@ X_grid = (X_grid.T / normalization).T  # normalize each input
 features_grid = np.array(
     [get_angles(x) for x in X_grid]
 )  # angles for state preparation are new features
-predictions_grid = [variational_classifier(weights[plot_iter-1], bias, f) for f in features_grid]
+predictions_grid = [variational_classifier(weights[plot_iter-1], bias[plot_iter-1], f) for f in features_grid]
 Z = np.reshape(predictions_grid, xx.shape)
 
 # plot decision regions
@@ -309,28 +315,76 @@ from datetime import datetime
 from datetime import datetime
 import pytz
 
-predictions_train = [variational_classifier(weights[plot_iter-1], bias, f) for f in feats_train]
-# predictions_val = [variational_classifier(w, bias, f) for f in feats_val]
-z = list(zip(X_train, predictions_train, Y_train))
+
+it_1 = 60
+it_2 = 100
+
+predictions_1 = [variational_classifier(weights[it_1-1], bias[it_1-1], f) for f in features]
+predictions_2 = [variational_classifier(weights[it_2-1], bias[it_2-1], f) for f in features]
+
+z = list(zip(X, Y, predictions_1, predictions_2))
 
 
 data = []
-for xt, p, yt in z:
+for x, y, p1, p2 in z:
+    conf_1 = round((p1.numpy()+1)/2, 4) if y==1 else round(1-(p1.numpy()+1)/2, 4)
+    conf_2 = round((p2.numpy()+1)/2, 4) if y==1 else round(1-(p2.numpy()+1)/2, 4)
 
-    pred = round((p.numpy()+1)/2, 4)
-
-    if np.sign(p.numpy())*yt == 1:
-        guess = "Ok"
-    else:
-        guess = "Error"
+    guess_1 = "Ok" if np.sign(p1.numpy())*y == 1 else "Error"
+    guess_2 = "Ok" if np.sign(p2.numpy())*y == 1 else "Error"
+    
+    increment = (conf_2-conf_1)/conf_1
     
     row = {}
-    row["X"], row["Y"], row["pred"], row["guess"] = xt.numpy(), yt.item(), pred, guess
+    row["X"], row["Y"], row[f"conf_{it_1}"], row[f"guess_{it_1}"], row[f"conf_{it_2}"], row[f"guess_{it_2}"], row["increment"] = x.numpy(), y.item(), conf_1, guess_1, conf_2, guess_2, increment
 
     data.append(row)
 
 data = pd.DataFrame(data)
 time_now = datetime.now(pytz.timezone('Europe/Andorra')).strftime("%Y-%m-%d %H-%M-%S")
-file_name = f'{time_now} - regularization, one_shot = {one_shot}'
-data.to_csv(f'results/{file_name}.csv', index=False)
+file_name = f'{time_now} - q={num_qubits}, e={num_layers_encoding}, u={num_layers_unitaries}, str={strength}'
+data.to_excel(f'results/{file_name}.xlsx', index=False)
 
+
+
+
+
+#%%
+
+one_shot = 2 # 0 - nothing, 1 - probabilities squared, 2 - variance
+strength = 1/2 # lambda of the regularisation - default = 1/2
+
+# continue the variational classifier
+for it in range(60, 100):
+
+    # Update the weights by one optimizer step
+    batch_index = np.random.randint(0, num_train, (batch_size,))
+    feats_train_batch = feats_train[batch_index]
+    Y_train_batch = Y_train[batch_index]
+    w, b, _, _ = opt.step(cost, w, b, feats_train_batch, Y_train_batch)
+    weights.append(w)
+    bias.append(b)
+    
+    # Compute predictions on train and validation set
+    predictions_train = [np.sign(variational_classifier(w, b, f)) for f in feats_train]
+    predictions_val = [np.sign(variational_classifier(w, b, f)) for f in feats_val]
+
+    # Compute accuracy on train and validation set
+    acc_train = accuracy(Y_train, predictions_train)
+    acc_val = accuracy(Y_val, predictions_val)
+
+    print(
+        "Iter: {:5d} | Cost: {:0.7f} | Acc train: {:0.7f} | Acc validation: {:0.7f}"
+        "".format(it + 1, cost(w, b, features, Y), acc_train, acc_val)
+    )
+    
+
+#%%
+
+weights = weights[:60]
+bias = bias[:60]
+
+
+#%%
+
+weights[60]
