@@ -4,11 +4,13 @@
 import pennylane as qml
 from pennylane import numpy as np
 from pennylane.optimize import NesterovMomentumOptimizer
+import matplotlib.pyplot as plt
 
 dataset = 2 #1-Pennylane, 2-Circles
+parallel = False
 
-num_qubits = 2 #2
-num_layers_encoding = 1 #3
+num_qubits = 4 #2
+num_layers_encoding = 3 #3
 num_layers_unitaries = 6
 num_iters = 60
 
@@ -25,6 +27,7 @@ def circles_dataset(num_datapoints, R, square_size):
 
     np.random.seed(0)
     r = np.random.rand(num_datapoints)*R
+    
     theta = np.random.rand(num_datapoints)*2*np.pi
     circle = np.array(list(zip(np.sqrt(r)*np.cos(theta),np.sqrt(r)*np.sin(theta))))
 
@@ -157,13 +160,16 @@ def cost(weights, bias, features, labels):
     predictions = [variational_classifier(weights, bias, f) for f in features]
     return square_loss(labels, predictions)
 
+
 if dataset == 1:
     data = np.loadtxt("data/iris_classes1and2_scaled.txt")
+
 elif dataset == 2:
-    num_datapoints = 100
+    num_datapoints = 50 #100
     R = 0.2 #radius circumference
     square_size = 1
-    circles_dataset(num_datapoints, R, square_size)
+    data = circles_dataset(num_datapoints, R, square_size)
+
 
 X = data[:, 0:2]
 print("First X sample (original)  :", X[0])
@@ -183,40 +189,6 @@ features = np.array([get_angles(x) for x in X_norm], requires_grad=False)
 print("First features sample      :", features[0])
 
 Y = data[:, -1]
-
-
-import matplotlib.pyplot as plt
-
-
-# plt.figure()
-# plt.scatter(X[:, 0][Y == 1], X[:, 1][Y == 1], c="b", marker="o", edgecolors="k")
-# plt.scatter(X[:, 0][Y == -1], X[:, 1][Y == -1], c="r", marker="o", edgecolors="k")
-# plt.title("Original data")
-# plt.show()
-
-# plt.figure()
-# dim1 = 0
-# dim2 = 1
-# plt.scatter(
-#     X_norm[:, dim1][Y == 1], X_norm[:, dim2][Y == 1], c="b", marker="o", edgecolors="k"
-# )
-# plt.scatter(
-#     X_norm[:, dim1][Y == -1], X_norm[:, dim2][Y == -1], c="r", marker="o", edgecolors="k"
-# )
-# plt.title("Padded and normalised data (dims {} and {})".format(dim1, dim2))
-# plt.show()
-
-# plt.figure()
-# dim1 = 0
-# dim2 = 3
-# plt.scatter(
-#     features[:, dim1][Y == 1], features[:, dim2][Y == 1], c="b", marker="o", edgecolors="k"
-# )
-# plt.scatter(
-#     features[:, dim1][Y == -1], features[:, dim2][Y == -1], c="r", marker="o", edgecolors="k"
-# )
-# plt.title("Feature vectors (dims {} and {})".format(dim1, dim2))
-# plt.show()
 
 np.random.seed(0)
 num_data = len(Y)
@@ -271,13 +243,13 @@ for it in range(num_iters): #60
 
 #%%
 
-plot_iter = 100 #it+1 #80
+plot_iter = 100 #it+1
 
 plt.figure()
 cm = plt.cm.RdBu
 
 # make data for decision regions
-xx, yy = np.meshgrid(np.linspace(0.0, 1.5, 20), np.linspace(0.0, 1.5, 20))
+xx, yy = np.meshgrid(np.linspace(-1.1, 1.1, 20), np.linspace(-1.1, 1.1, 20))
 X_grid = [np.array([x, y]) for x, y in zip(xx.flatten(), yy.flatten())]
 
 # preprocess grid points like data inputs above
@@ -335,6 +307,7 @@ plt.scatter(
 )
 
 plt.legend()
+plt.axis('square')
 plt.show()
 
 
@@ -357,16 +330,24 @@ z = list(zip(X, Y, predictions_1, predictions_2))
 
 data = []
 for x, y, p1, p2 in z:
-    conf_1 = round((p1.numpy()+1)/2, 4) if y==1 else round(1-(p1.numpy()+1)/2, 4)
-    conf_2 = round((p2.numpy()+1)/2, 4) if y==1 else round(1-(p2.numpy()+1)/2, 4)
+    
+    if dataset == 1:
+        x = x.numpy()
+        y= y.item()
 
-    guess_1 = "Ok" if np.sign(p1.numpy())*y == 1 else "Error"
-    guess_2 = "Ok" if np.sign(p2.numpy())*y == 1 else "Error"
+    p1 = p1.numpy()
+    p2 = p2.numpy()
+    
+    conf_1 = round((p1+1)/2, 4) if y==1 else round(1-(p1+1)/2, 4)
+    conf_2 = round((p2+1)/2, 4) if y==1 else round(1-(p2+1)/2, 4)
+
+    guess_1 = "Ok" if np.sign(p1)*y == 1 else "Error"
+    guess_2 = "Ok" if np.sign(p2)*y == 1 else "Error"
     
     increment = (conf_2-conf_1)/conf_1
     
     row = {}
-    row["X"], row["Y"], row[f"conf_{it_1}"], row[f"guess_{it_1}"], row[f"conf_{it_2}"], row[f"guess_{it_2}"], row["increment"] = x.numpy(), y.item(), conf_1, guess_1, conf_2, guess_2, increment
+    row["X"], row["Y"], row[f"conf_{it_1}"], row[f"guess_{it_1}"], row[f"conf_{it_2}"], row[f"guess_{it_2}"], row["increment"] = x, y, conf_1, guess_1, conf_2, guess_2, increment
 
     data.append(row)
 
@@ -382,7 +363,7 @@ data.to_excel(f'results/{file_name}.xlsx', index=False)
 #%%
 
 one_shot = 2 # 0 - nothing, 1 - probabilities squared, 2 - variance
-strength = 1 # lambda of the regularisation - default = 1/2
+strength = 1/2 # lambda of the regularisation - default = 1/2
 
 # continue the variational classifier
 for it in range(60, 100):
@@ -416,18 +397,15 @@ bias = bias[:60]
 
 
 #%%
- 
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
 
-def circles_dataset(num_datapoints, R, square_size)
+def circles_dataset(num_datapoints, R, square_size):
     # num_datapoints = 100
     # R = 0.2 #radius circumference
     # square_size = 1
 
     np.random.seed(0)
     r = np.random.rand(num_datapoints)*R
+    print(r)
     theta = np.random.rand(num_datapoints)*2*np.pi
     circle = np.array(list(zip(np.sqrt(r)*np.cos(theta),np.sqrt(r)*np.sin(theta))))
 
@@ -441,3 +419,28 @@ def circles_dataset(num_datapoints, R, square_size)
 
     return data
 
+num_datapoints = 100
+R = 0.2 #radius circumference
+square_size = 1
+circles_dataset(num_datapoints, R, square_size)
+
+
+#%%
+
+def square_loss(labels, predictions):
+    loss = 0
+    for l, p in zip(labels, predictions):
+        loss = loss + (l - p) ** 2
+
+    
+    if one_shot == 1:
+        regularisation = -sum([((p+1)/2)**2 + (1-(p+1)/2)**2 for p in predictions])
+    elif one_shot == 2:
+        regularisation = sum([(1 - p**2)**2 for p in predictions])
+    else:
+        regularisation = 0
+    
+    
+    loss = (loss + strength*regularisation)/ len(labels)
+
+    return loss
