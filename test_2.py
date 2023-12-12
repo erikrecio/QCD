@@ -5,8 +5,10 @@ import pennylane as qml
 from pennylane import numpy as np
 from pennylane.optimize import NesterovMomentumOptimizer
 
-num_qubits = 6 #2
-num_layers_encoding = 3 #3
+dataset = 2 #1-Pennylane, 2-Circles
+
+num_qubits = 2 #2
+num_layers_encoding = 1 #3
 num_layers_unitaries = 6
 num_iters = 60
 
@@ -15,6 +17,27 @@ strength = 1/2 # lambda of the regularisation
 
 
 dev = qml.device("default.qubit", wires=num_qubits)
+
+def circles_dataset(num_datapoints, R, square_size):
+    # num_datapoints = 100
+    # R = 0.2 #radius circumference
+    # square_size = 1
+
+    np.random.seed(0)
+    r = np.random.rand(num_datapoints)*R
+    theta = np.random.rand(num_datapoints)*2*np.pi
+    circle = np.array(list(zip(np.sqrt(r)*np.cos(theta),np.sqrt(r)*np.sin(theta))))
+
+    c1 = circle/2+np.array([R,square_size-R])
+    c2 = circle/2+np.array([square_size-R,R])
+
+    c1 = np.append(c1, [[1]]*num_datapoints, axis=1)
+    c2 = np.append(c2, [[-1]]*num_datapoints, axis=1)
+
+    data = np.append(c1,c2,axis=0)
+
+    return data
+
 
 def get_angles(x):
 
@@ -134,7 +157,14 @@ def cost(weights, bias, features, labels):
     predictions = [variational_classifier(weights, bias, f) for f in features]
     return square_loss(labels, predictions)
 
-data = np.loadtxt("data/iris_classes1and2_scaled.txt")
+if dataset == 1:
+    data = np.loadtxt("data/iris_classes1and2_scaled.txt")
+elif dataset == 2:
+    num_datapoints = 100
+    R = 0.2 #radius circumference
+    square_size = 1
+    circles_dataset(num_datapoints, R, square_size)
+
 X = data[:, 0:2]
 print("First X sample (original)  :", X[0])
 
@@ -241,7 +271,7 @@ for it in range(num_iters): #60
 
 #%%
 
-plot_iter = 91 #it+1 #80
+plot_iter = 100 #it+1 #80
 
 plt.figure()
 cm = plt.cm.RdBu
@@ -352,7 +382,7 @@ data.to_excel(f'results/{file_name}.xlsx', index=False)
 #%%
 
 one_shot = 2 # 0 - nothing, 1 - probabilities squared, 2 - variance
-strength = 1/2 # lambda of the regularisation - default = 1/2
+strength = 1 # lambda of the regularisation - default = 1/2
 
 # continue the variational classifier
 for it in range(60, 100):
@@ -386,5 +416,28 @@ bias = bias[:60]
 
 
 #%%
+ 
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
 
-weights[60]
+def circles_dataset(num_datapoints, R, square_size)
+    # num_datapoints = 100
+    # R = 0.2 #radius circumference
+    # square_size = 1
+
+    np.random.seed(0)
+    r = np.random.rand(num_datapoints)*R
+    theta = np.random.rand(num_datapoints)*2*np.pi
+    circle = np.array(list(zip(np.sqrt(r)*np.cos(theta),np.sqrt(r)*np.sin(theta))))
+
+    c1 = circle/2+np.array([R,square_size-R])
+    c2 = circle/2+np.array([square_size-R,R])
+
+    c1 = np.append(c1, [[1]]*num_datapoints, axis=1)
+    c2 = np.append(c2, [[-1]]*num_datapoints, axis=1)
+
+    data = np.append(c1,c2,axis=0)
+
+    return data
+
