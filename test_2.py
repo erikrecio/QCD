@@ -8,11 +8,12 @@ import matplotlib.pyplot as plt
 
 dataset = 2 #1-Pennylane, 2-Circles
 parallel = False
+ty_loss = 1 # type loss: 1-squares or 2-hinge loss
 
-num_qubits = 4 #2
-num_layers_encoding = 3 #3
+num_qubits = 2 # 2 or 4
+num_layers_encoding = 1 #1 or 3
 num_layers_unitaries = 6
-num_iters = 60
+num_iters = 2
 
 one_shot = 0 # 0 - nothing, 1 - probabilities squared, 2 - variance
 strength = 1/2 # lambda of the regularisation
@@ -31,8 +32,11 @@ def circles_dataset(num_datapoints, R, square_size):
     theta = np.random.rand(num_datapoints)*2*np.pi
     circle = np.array(list(zip(np.sqrt(r)*np.cos(theta),np.sqrt(r)*np.sin(theta))))
 
-    c1 = circle/2+np.array([R,square_size-R])
-    c2 = circle/2+np.array([square_size-R,R])
+    # c1 = circle/2+np.array([R,square_size-R])
+    # c2 = circle/2+np.array([square_size-R,R])
+    
+    c1 = circle/2+np.array([R,R])
+    c2 = circle/2+np.array([square_size-R,square_size-R])
 
     c1 = np.append(c1, [[1]]*num_datapoints, axis=1)
     c2 = np.append(c2, [[-1]]*num_datapoints, axis=1)
@@ -130,8 +134,13 @@ def variational_classifier(weights, bias, angles):
 
 def square_loss(labels, predictions):
     loss = 0
-    for l, p in zip(labels, predictions):
-        loss = loss + (l - p) ** 2
+    
+    if ty_loss == 1:
+        for l, p in zip(labels, predictions):
+            loss = loss + (l - p) ** 2
+    elif ty_loss == 2:
+        for l, p in zip(labels, predictions):
+            loss = loss + np.max([0,1-l*p])
 
     
     if one_shot == 1:
@@ -243,7 +252,7 @@ for it in range(num_iters): #60
 
 #%%
 
-plot_iter = 100 #it+1
+plot_iter = 1 #it+1
 
 plt.figure()
 cm = plt.cm.RdBu
@@ -265,7 +274,7 @@ Z = np.reshape(predictions_grid, xx.shape)
 
 # plot decision regions
 cnt = plt.contourf(
-    xx, yy, Z, levels=np.arange(-1, 1.1, 0.1), cmap=cm, alpha=0.8, extend="both"
+    xx, yy, Z, levels=np.arange(-2, 2.1, 0.1), cmap=cm, alpha=0.8, extend="both"
 )
 plt.contour(
     xx, yy, Z, levels=[0.0], colors=("black",), linestyles=("--",), linewidths=(0.8,)
@@ -362,6 +371,7 @@ data.to_excel(f'results/{file_name}.xlsx', index=False)
 
 #%%
 
+# num_layers_encoding = 3
 one_shot = 2 # 0 - nothing, 1 - probabilities squared, 2 - variance
 strength = 1/2 # lambda of the regularisation - default = 1/2
 
